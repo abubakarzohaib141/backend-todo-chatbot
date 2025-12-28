@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"D:\\todo-app\\todo-app\\phase-2\\backend\" diff app/models/todo.py)",
+      "Bash(git -C \"D:\\todo-app\\todo-app\\phase-2\\backend\" diff app/services/todo_service.py)",
+      "Bash(git -C \"D:\\todo-app\\todo-app\\phase-2\\backend\" log --oneline -10)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
