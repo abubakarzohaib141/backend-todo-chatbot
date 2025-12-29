@@ -26,6 +26,10 @@ if not GEMINI_API_KEY:
 external_client: AsyncOpenAI = AsyncOpenAI(
     api_key=GEMINI_API_KEY or "missing-key",
     base_url="https://openrouter.ai/api/v1",
+    default_headers={
+        "HTTP-Referer": "https://huggingface.co/spaces/abubakaris/backend-todo-app",
+        "X-Title": "Todo App Hackathon"
+    }
 )
 
 # 2. Chat model for Gemini
