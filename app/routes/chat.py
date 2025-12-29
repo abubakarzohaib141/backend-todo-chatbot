@@ -49,10 +49,12 @@ async def chat(
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
+        print(f"[DEBUG] Chat started for user {user_id}")
         # Get or create conversation
         conversation = ConversationService.get_or_create_conversation(
             session, user_id, request.conversation_id
         )
+        print(f"[DEBUG] Conversation: {conversation.id}")
 
         # Set conversation title from first message if needed
         if not conversation.title:
@@ -63,6 +65,7 @@ async def chat(
         recent_messages = ConversationService.get_recent_conversation_messages(
             session, conversation.id, user_id, limit=10
         )
+        print(f"[DEBUG] Recent messages: {len(recent_messages)}")
 
         # Format conversation history for agent
         conversation_history = []
@@ -74,19 +77,23 @@ async def chat(
 
         # Get task summary for context
         task_summary = TodoService.get_user_statistics(session, user_id)
+        print(f"[DEBUG] Task summary retrieved")
 
         # Initialize MCP executor
         mcp_executor = MCPToolExecutor(session, user_id)
 
         # Initialize and run agent
+        print(f"[DEBUG] Initializing agent...")
         agent = TodoAgent(user_id, mcp_executor)
         agent.set_conversation_history(conversation_history)
 
         # Process message with agent
+        print(f"[DEBUG] Calling agent.process_message...")
         agent_result = await agent.process_message(
             request.message,
             task_summary=task_summary
         )
+        print(f"[DEBUG] Agent processing finished")
 
         # Store user message in database
         user_message = ConversationService.add_message(
@@ -115,6 +122,7 @@ async def chat(
         ]
 
         # Store assistant response in database
+        print(f"[DEBUG] Storing assistant response...")
         assistant_message = ConversationService.add_message(
             session,
             conversation.id,
@@ -135,6 +143,7 @@ async def chat(
                 if isinstance(tc, dict):
                     validated_tool_calls.append(tc)
 
+        print(f"[DEBUG] Sending response to client...")
         return ChatResponse(
             conversation_id=conversation.id,
             message_id=assistant_message.id,
