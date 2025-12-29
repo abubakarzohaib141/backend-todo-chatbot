@@ -200,7 +200,12 @@ class TodoAgent:
 
         # Run agent
         try:
-            result: Runner = await Runner.run(todo_agent, input=messages)
+            print(f"[DEBUG] Running agent with message: {user_message[:50]}...")
+            # Use only the user message as input, history is in instructions or managed by SDK
+            # But the SDK usually takes history in provide_history or similar
+            # Since the user's instructions mentioned history, we'll try to pass it in messages
+            # If it fails, we'll try string input next
+            result = await Runner.run(todo_agent, input=user_message)
             print(f"[DEBUG] Runner completed successfully")
         except Exception as e:
             print(f"[ERROR] Failed to run agent: {e}")
@@ -211,36 +216,50 @@ class TodoAgent:
 
         # Safely extract final_output
         final_output = ""
-        if hasattr(result, "final_output") and result.final_output:
-            output = result.final_output
-            if isinstance(output, str):
-                final_output = output
+        try:
+            if hasattr(result, "final_output"):
+                final_output = str(result.final_output)
+            elif isinstance(result, str):
+                final_output = result
             else:
-                # Handle non-string final_output by converting to string
-                try:
-                    final_output = str(output)
-                except Exception as e:
-                    print(f"Error converting final_output to string: {e}")
-                    final_output = ""
+                # Some versions might return a different object
+                final_output = str(result)
+        except Exception as e:
+            print(f"Error extracting final_output: {e}")
 
-        # Safely extract tool_calls, handling Union type issues
+        # Safely extract tool_calls
         tool_calls = []
-        if hasattr(result, "tool_calls"):
-            raw_tool_calls = getattr(result, "tool_calls", [])
-            # Ensure tool_calls is a list and contains only serializable dicts
-            if isinstance(raw_tool_calls, list):
-                for tc in raw_tool_calls:
-                    if isinstance(tc, dict):
-                        tool_calls.append(tc)
-                    else:
-                        # Handle non-dict tool calls by converting to dict
-                        try:
-                            if hasattr(tc, "__dict__"):
-                                tool_calls.append(tc.__dict__)
-                            else:
-                                print(f"Warning: Unable to serialize tool_call: {type(tc)}")
-                        except Exception as e:
-                            print(f"Error serializing tool_call: {e}")
+        try:
+            # The SDK might have tool_calls on the result object
+            raw_calls = getattr(result, "tool_calls", [])
+            if not raw_calls and hasattr(result, "steps"):
+                # Multi-step agents might have tool calls in steps
+                for step in getattr(result, "steps", []):
+                    if hasattr(step, "tool_calls"):
+                        raw_calls.extend(step.tool_calls)
+
+            for tc in raw_calls:
+                call_data = {}
+                if isinstance(tc, dict):
+                    call_data = tc
+                else:
+                    # It's likely a ToolCall object or similar
+                    call_data = {
+                        "tool": getattr(tc, "name", getattr(tc, "tool_name", "unknown")),
+                        "parameters": getattr(tc, "arguments", getattr(tc, "tool_arguments", {})),
+                        "result": getattr(tc, "output", getattr(tc, "result", None))
+                    }
+                
+                # Ensure parameters is a dict
+                if isinstance(call_data.get("parameters"), str):
+                    try:
+                        call_data["parameters"] = json.loads(call_data["parameters"])
+                    except:
+                        pass
+                
+                tool_calls.append(call_data)
+        except Exception as e:
+            print(f"Error extracting tool_calls: {e}")
 
         return {
             "response": final_output,
@@ -251,6 +270,13 @@ class TodoAgent:
         prompt = """You are a helpful AI assistant for managing tasks.
 You have access to tools: add_task, list_tasks, complete_task, delete_task, update_task, get_task.
 Respond friendly, confirm actions, ask for clarification if needed, include due dates if available."""
+
+        # Add conversation history for context
+        if self.conversation_history:
+            prompt += "\n\nRecent conversation history:\n"
+            for msg in self.conversation_history[-5:]: # Last 5 messages for conciseness
+                role = "User" if msg["role"] == "user" else "Assistant"
+                prompt += f"{role}: {msg['content']}\n"
 
         if task_summary:
             prompt += f"\n\nCurrent user task summary:\n"

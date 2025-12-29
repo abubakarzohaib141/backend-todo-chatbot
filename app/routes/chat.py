@@ -163,7 +163,7 @@ async def chat(
         print(f"Full traceback:\n{error_trace}")
         raise HTTPException(
             status_code=500,
-            detail="An error occurred while processing your message"
+            detail=f"Backend Error [{type(e).__name__}]: {str(e)}"
         )
 
 
