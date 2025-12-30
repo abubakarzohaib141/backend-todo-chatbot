@@ -28,12 +28,12 @@ else:
 # 1. External Gemini client
 external_client: AsyncOpenAI = AsyncOpenAI(
     api_key=GEMINI_API_KEY or "missing-key",
-    base_url="https://openrouter.ai/api/v1",
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
 )
 
 # 2. Chat model for Gemini
 llm_model: OpenAIChatCompletionsModel = OpenAIChatCompletionsModel(
-    model="google/gemini-2.0-flash-001",
+    model="gemini-2.0-flash",
     openai_client=external_client
 )
 
