@@ -12,18 +12,31 @@ from agents import (
     OpenAIChatCompletionsModel,
     set_tracing_disabled
 )
-
+load_dotenv()
 # Disable tracing if not needed
 set_tracing_disabled(disabled=True)
 
 # API Configuration
-GEMINI_API_KEY = settings.gemini_api_key
+GEMINI_API_KEY = settings.gemini_api_key.strip() if settings.gemini_api_key else ""
 
 if not GEMINI_API_KEY:
-    print("[WARNING] GEMINI_API_KEY is not set in settings!")
+    # Fallback to os.getenv if settings is empty
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+
+if not GEMINI_API_KEY:
+    print("[WARNING] GEMINI_API_KEY is not set in settings or environment!")
 else:
-    # Safe log of key presence
-    print(f"[INFO] API Key loaded. Starts with: {GEMINI_API_KEY[:4]}...")
+    # Detect key type
+    key_type = "Unknown"
+    if GEMINI_API_KEY.startswith("AIza"):
+        key_type = "Google Gemini"
+    elif GEMINI_API_KEY.startswith("sk-or-"):
+        key_type = "OpenRouter"
+    
+    print(f"[INFO] API Key loaded. Type: {key_type}, Starts with: {GEMINI_API_KEY[:6]}...")
+    
+    if key_type == "OpenRouter":
+        print("[CAUTION] You are using an OpenRouter key with a direct Google URL! This will fail with a 400 error.")
 
 # 1. External Gemini client
 external_client: AsyncOpenAI = AsyncOpenAI(
