@@ -8,10 +8,10 @@ from agents import (
     Agent,
     Runner,
     function_tool,
-    AsyncOpenAI,
-    OpenAIChatCompletionsModel,
     set_tracing_disabled
 )
+from huggingface_hub import InferenceClient
+
 load_dotenv()
 # Disable tracing if not needed
 set_tracing_disabled(disabled=True)
@@ -19,47 +19,84 @@ set_tracing_disabled(disabled=True)
 # API Configuration
 # CRITICAL: Prioritize system environment variables (Hugging Face Secrets) over local files
 key_source = "None"
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+HF_API_KEY = os.environ.get("HF_API_KEY", "").strip()
 
-if GEMINI_API_KEY:
+if HF_API_KEY:
     key_source = "Environment Secret (OS)"
 else:
     # Fallback to Pydantic settings / .env file
-    GEMINI_API_KEY = settings.gemini_api_key.strip() if settings.gemini_api_key else ""
-    if GEMINI_API_KEY:
+    HF_API_KEY = settings.hf_api_key.strip() if settings.hf_api_key else ""
+    if HF_API_KEY:
         key_source = "Settings / .env file"
 
-if not GEMINI_API_KEY:
-    print("[WARNING] GEMINI_API_KEY is not set in Environment OR Settings!")
+if not HF_API_KEY:
+    print("[WARNING] HF_API_KEY is not set in Environment OR Settings!")
 else:
-    # Detect key type
-    key_type = "Unknown"
-    if GEMINI_API_KEY.startswith("AIza"):
-        key_type = "Google Gemini"
-    elif GEMINI_API_KEY.startswith("sk-or-"):
-        key_type = "OpenRouter"
-    
+    key_type = "Hugging Face"
     print(f"[INFO] API Key loaded from: {key_source}")
-    print(f"[INFO] Key Type: {key_type}, Starts with: {GEMINI_API_KEY[:6]}...")
-    
-    if key_type == "OpenRouter":
-        print("[CAUTION] You are using an OpenRouter key with a direct Google URL! This will fail with a 400 error.")
+    print(f"[INFO] Key Type: {key_type}, Starts with: {HF_API_KEY[:7]}...")
 
-# 1. External Gemini client
-external_client: AsyncOpenAI = AsyncOpenAI(
-    api_key=GEMINI_API_KEY or "missing-key",
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+# 1. Hugging Face Inference Client
+hf_client: InferenceClient = InferenceClient(
+    api_key=HF_API_KEY or "missing-key"
 )
 
-# 2. Chat model for Gemini
-llm_model: OpenAIChatCompletionsModel = OpenAIChatCompletionsModel(
-    model="gemini-2.0-flash",
-    openai_client=external_client
-)
+# 2. Chat model wrapper for Mistral-7B
+class HuggingFaceChatModel:
+    """Wrapper for Hugging Face Inference API to work with the agents SDK."""
+
+    def __init__(self, client: InferenceClient):
+        self.client = client
+        self.model_id = "mistralai/Mistral-7B-v0.1"
+
+    async def apredict(self, messages: List[dict], **kwargs) -> str:
+        """Async prediction using Hugging Face API."""
+        try:
+            # Format messages for the model
+            prompt = self._format_messages_to_prompt(messages)
+
+            # Call Hugging Face text generation
+            response = self.client.text_generation(
+                prompt=prompt,
+                max_new_tokens=kwargs.get('max_tokens', 1024),
+                temperature=kwargs.get('temperature', 0.7),
+                top_p=kwargs.get('top_p', 0.95),
+            )
+
+            return response
+        except Exception as e:
+            print(f"[ERROR] HF API call failed: {e}")
+            raise
+
+    async def generate(self, messages: List[dict], **kwargs) -> str:
+        """Generate response from messages."""
+        return await self.apredict(messages, **kwargs)
+
+    def _format_messages_to_prompt(self, messages: List[dict]) -> str:
+        """Convert chat messages to a prompt string for Mistral-7B."""
+        prompt = ""
+        for msg in messages:
+            role = msg.get("role", "user").lower()
+            content = msg.get("content", "").strip()
+
+            if role == "system":
+                prompt += f"[SYSTEM]\n{content}\n\n"
+            elif role == "user":
+                prompt += f"[INST]\n{content}\n[/INST]\n"
+            elif role == "assistant":
+                prompt += f"{content}\n"
+
+        # Add assistant prompt marker
+        if not prompt.endswith("[/INST]\n"):
+            prompt += "[INST]\n"
+
+        return prompt
+
+llm_model: HuggingFaceChatModel = HuggingFaceChatModel(hf_client)
 
 
 class TodoAgent:
-    """AI Agent for managing todos via natural language using Gemini 2.5 Flash."""
+    """AI Agent for managing todos via natural language using Mistral-7B via Hugging Face."""
 
     def __init__(self, user_id: int, mcp_executor):
         self.user_id = user_id

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     )
 
     # AI/LLM
-    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    hf_api_key: str = Field(default="", alias="HF_API_KEY")
 
     class Config:
         env_file = ".env"
