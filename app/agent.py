@@ -3,6 +3,7 @@ import json
 import asyncio
 from typing import Optional, List
 from dotenv import load_dotenv
+from app.config import settings
 from agents import (
     Agent,
     Runner,
@@ -15,21 +16,19 @@ from agents import (
 # Disable tracing if not needed
 set_tracing_disabled(disabled=True)
 
-# Load environment variables
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# API Configuration
+GEMINI_API_KEY = settings.gemini_api_key
 
 if not GEMINI_API_KEY:
-    print("[WARNING] GEMINI_API_KEY is not set! Agent will likely fail.")
+    print("[WARNING] GEMINI_API_KEY is not set in settings!")
+else:
+    # Safe log of key presence
+    print(f"[INFO] API Key loaded. Starts with: {GEMINI_API_KEY[:4]}...")
 
 # 1. External Gemini client
 external_client: AsyncOpenAI = AsyncOpenAI(
     api_key=GEMINI_API_KEY or "missing-key",
     base_url="https://openrouter.ai/api/v1",
-    default_headers={
-        "HTTP-Referer": "https://huggingface.co/spaces/abubakaris/backend-todo-app",
-        "X-Title": "Todo App Hackathon"
-    }
 )
 
 # 2. Chat model for Gemini
